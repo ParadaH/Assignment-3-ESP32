@@ -1,11 +1,21 @@
-#include <WiFi.h>
-#include <PubSubClient.h>
+  #include <WiFi.h>
+  #include <PubSubClient.h>
 #include "Led.h"
-#define MSG_BUFFER_SIZE  50
+#include "SensorTemp.h"
+#define MSG_BUFFER_SIZE 50
 #define TMP36_PIN 4
 #define GREEN_PIN 1
 #define RED_PIN 2
 #define offsetTemperature 130 // offset adapted by empirical method
+
+/* FSM states */
+#define EMPTY 101
+#define FULL 102
+#define OPEN 103
+#define CLOSE 104
+#define ALARM 105
+#define SLEEP 106
+#define IDLE 107
 
 /* wifi network info */
 const char* ssid = "iPhone (Hubert)";
@@ -15,7 +25,7 @@ const char* password = "asdasdasd";
 const char* mqtt_server = "broker.mqtt-dashboard.com";
 
 /* MQTT topic */
-const char* topic = "esiot2024";
+const char* topic = "ESP32_temperature";
 
 /* MQTT client management */
 WiFiClient espClient;
@@ -26,15 +36,9 @@ char msg[MSG_BUFFER_SIZE];
 int value = 0;
 float temperature = 0;
 
+/* Init LED and TMP36 */
 Led statusLed(GREEN_PIN, RED_PIN);
-
-float readTemperature() {
-    int sensorValue = analogRead(TMP36_PIN);
-    float mV = (sensorValue / 4095.0) * 5 * 1000;
-
-    float temperatureC = (mV - (500 + offsetTemperature) ) / 10;
-    return temperatureC;
-}
+TemperatureSensor tempSensor(TMP36_PIN, offsetTemperature);
 
 void setup_wifi() {
   delay(10);
@@ -52,19 +56,16 @@ void setup_wifi() {
 }
 
 /* MQTT subscribing callback */
-
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.println(String("Message arrived on [") + topic + "] len: " + length );
-
+  // Serial.println(String("Message arrived on [") + topic + "] len: " + length );
   for (int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
+  Serial.print("\n");
 }
 
 void reconnect() {
-  
   // Loop until we're reconnected
-  
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     
@@ -73,7 +74,7 @@ void reconnect() {
 
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
-      Serial.println("connected");
+      Serial.println("Connected");
 
       // Once connected, publish an announcement...
       // client.publish("outTopic", "hello world");
@@ -83,7 +84,7 @@ void reconnect() {
 
       Serial.print("failed, rc=");
       Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
+      Serial.println("try again in 5 seconds");
       // Wait 5 seconds before retrying
       delay(5000);
     }
@@ -102,6 +103,9 @@ void setup() {
 
 void loop() {
 
+  switch (state) {
+    case 
+  }
   if (!client.connected()) {
     statusLed.setRed();
     reconnect();
@@ -109,28 +113,20 @@ void loop() {
   else {
     statusLed.setGreen();
   }
+  
   client.loop();
   
-
-
   unsigned long now = millis();
   if (now - lastMsgTime > 10000) {
-
-    temperature = readTemperature();
-    // Serial.println(temperature); //Just for me
-
     lastMsgTime = now;
-    value++;
+
+    temperature = tempSensor.readTemperature();
 
     /* creating a msg in the buffer */
-    // snprintf (msg, MSG_BUFFER_SIZE, "hello world #%ld", value);
-    snprintf (msg, MSG_BUFFER_SIZE, "Temp: %f", temperature);
+    snprintf (msg, MSG_BUFFER_SIZE, "%0.2f", temperature);
 
-    // Serial.println(String("Publishing message: ") + msg);
-    
     /* publishing the msg */
     client.publish(topic, msg);
-
 
   }
 }

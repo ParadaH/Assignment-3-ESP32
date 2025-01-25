@@ -1,5 +1,5 @@
-#ifndef __LED__
-#define __LED__
+#ifndef __LED_H__
+#define __LED_H__
 
 #include <Arduino.h>
 
