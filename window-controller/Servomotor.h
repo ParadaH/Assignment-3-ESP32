@@ -13,7 +13,6 @@ public:
     Servomotor();
     void attach(int pin);
     void write(int angle);
-    void detach();
 };
 
 #endif

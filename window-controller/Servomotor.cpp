@@ -12,9 +12,3 @@ void Servomotor::write(int angle) {
         motor.write(angle);
     }
 }
-
-void Servomotor::detach() {
-    if (pin != -1) {
-        motor.detach();
-    }
-}

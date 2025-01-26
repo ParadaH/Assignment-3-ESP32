@@ -3,7 +3,6 @@
 #include "Potentiometer.h"
 #include "Servomotor.h"
 
-
 #define SERVO_PIN 9
 #define BUTTON_PIN 7
 #define POTENTIOMETER_PIN A0
@@ -12,45 +11,81 @@
 #define MANUAL_MODE 102
 #define AUTO_MODE 103
 #define ALARM 104
+#define CHECKTEMP 105
+
+#define T1 20
+#define T2 30
 
 String initMsg = "Starting...";
+String alarmMsg = "ALARM!       Temp too high!";
 
 int currentState = IDLE;
 bool isManualMode = false;
 int windowPosition = 0;
-float currentTemperature = 22;
-float tempThreshold = 35;
+int servoAngle = 0;
+float T = 23;
 
 long lastLCDUpdateTime = 0;
 int LCDUpdateFrequency = 500;
+
+bool resetAlarmCommand = false;
+bool alarmCommand = false;
 
 Button button(BUTTON_PIN, &isManualMode);
 Servomotor windowServo;
 Potentiometer potentiometer(POTENTIOMETER_PIN);
 LCDScreenDisplay screenDisplay;
 
-void handleButton(){
-  static bool lastButtonState = LOW;
-  bool buttonState = digitalRead(BUTTON_PIN);
+void readFromSerial(){
+  if(Serial.available() > 0){
 
-  if (buttonState == HIGH && lastButtonState == LOW) {
-    isManualMode = !isManualMode;
+    String receivedData = Serial.readStringUntil("\n");
+    
+    Serial.println("Information acknowledged: " + String(receivedData));
+
+    if(receivedData == "RESET_ALARM"){
+      if(currentState == ALARM){
+        resetAlarmCommand = true;
+      }
+      else {
+        resetAlarmCommand = true;
+        /* callback that there is no alarm */
+      }
+    }
+    else if(receivedData == "ALARM"){
+      alarmCommand = true;
+    }
+    else {
+      T = receivedData.toFloat();
+    }
   }
-  lastButtonState = buttonState;
+}
+
+void invalidate(){
+  if(millis() - lastLCDUpdateTime >= LCDUpdateFrequency){
+    lastLCDUpdateTime = millis();
+
+    if(alarmCommand == true){
+      screenDisplay.updateMsg(alarmMsg);
+    }
+    else if(alarmCommand == false){
+      screenDisplay.updateWindowParameters(T, isManualMode, windowPosition);
+    }
+  }
 }
 
 void updateWindowPosition(){
-  if(currentTemperature < 20){
+  if(T < T1){
     windowPosition = 0;
   }
-  else if(currentTemperature >= 20 && currentTemperature < 25){
-    windowPosition = map(currentTemperature, 20, 25, 0, 50);
+  else if(T >= T1 && T < T2){
+    windowPosition = map(T, 20, 30, 0, 90);
   }
-  else if(currentTemperature >= 25){
+  else if(T >= T2){
     windowPosition = 100;
   }
 
-  int servoAngle = map(windowPosition, 0, 100, 0, 90);
+  servoAngle = map(windowPosition, 0, 100, 0, 90);
   windowServo.write(servoAngle);
 }
 
@@ -63,26 +98,37 @@ void setup(){
 
   screenDisplay.init();
   screenDisplay.updateMsg(initMsg);
-  delay(2000);
+  delay(1000);
   screenDisplay.updateMsg("");
 }
 
 void loop(){
 
+  button.handleButton();
+  readFromSerial();
+
   switch (currentState) {
-    case IDLE:
-    {
-      if(isManualMode){
-        currentState = MANUAL_MODE;
-      } 
-      else if(!isManualMode){
-        currentState = AUTO_MODE;
+    case IDLE: {
+      if(alarmCommand == false){
+        if(isManualMode){
+          currentState = MANUAL_MODE;
+        } 
+        else if(!isManualMode){
+          if(alarmCommand = false){
+            currentState = ALARM;
+            break;
+          }
+          currentState = AUTO_MODE;
+        }
       }
+      else {
+        currentState = ALARM;
+      }
+        
       break;
     }
 
-    case MANUAL_MODE:
-    {
+    case MANUAL_MODE: {
         windowPosition = potentiometer.read();
         int servoAngle = map(windowPosition, 0, 100, 0, 90); // 0-100% -> 0-90 deg
         windowServo.write(servoAngle);
@@ -90,36 +136,21 @@ void loop(){
         break;
     }
       
-    case AUTO_MODE:
-    {
+    case AUTO_MODE: {
       updateWindowPosition();
-      if(currentTemperature > tempThreshold){
-        currentState = ALARM;
-        break;
-      }
       currentState = IDLE;
       break;
     }
       
-    case ALARM:
-    {
-      windowServo.write(0);
-      if (currentTemperature <= tempThreshold) {
+    case ALARM: {
+      if(resetAlarmCommand){
         currentState = IDLE;
+        resetAlarmCommand = false;
+        alarmCommand = false;
       }
+      windowServo.write(0);
       break;
     }
   }
-
-  if(millis() - lastLCDUpdateTime >= LCDUpdateFrequency){
-    lastLCDUpdateTime = millis();
-    if(currentState == ALARM){
-      screenDisplay.updateMsg("ALARM!       Temp too high!");
-    }
-    if(currentState != ALARM){
-      screenDisplay.updateWindowParameters(currentTemperature, isManualMode, windowPosition);
-    }
-  }
-
-  button.handleButton();
+  invalidate();
 }
