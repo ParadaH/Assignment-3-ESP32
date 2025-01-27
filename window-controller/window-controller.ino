@@ -20,13 +20,13 @@ String initMsg = "Starting...";
 String alarmMsg = "ALARM!       Temp too high!";
 
 int currentState = IDLE;
+int command = 0;
 bool isManualMode = false;
 int windowPosition = 0;
-int servoAngle = 0;
-float T = 23;
+float T = 23; // Initial temperature value
 
 long lastLCDUpdateTime = 0;
-int LCDUpdateFrequency = 500;
+int LCDUpdateFrequency = 500; // LCD screen display refresh rate [ms]
 
 bool resetAlarmCommand = false;
 bool alarmCommand = false;
@@ -40,24 +40,32 @@ void readFromSerial(){
   if(Serial.available() > 0){
 
     String receivedData = Serial.readStringUntil("\n");
-    
-    Serial.println("Information acknowledged: " + String(receivedData));
+    receivedData.trim();
 
-    if(receivedData == "RESET_ALARM"){
-      if(currentState == ALARM){
-        resetAlarmCommand = true;
+    float value = receivedData.toFloat();
+
+    if(value > 997){ //commands
+      command = value;
+      command = int(command);
+      if (command == 998) { // Reset alarm command
+        if (currentState == ALARM) {
+          resetAlarmCommand = true;
+          Serial.println("Reset alarm command acknowledged.");
+        } else {
+          Serial.println("No active alarm to reset.");
+        }
+      } else if (command == 999) { // Set alarm command
+        alarmCommand = true;
+        Serial.println("Alarm acknowledged and processed.");
+      } else if (command == 1001){ // Set auto mode command
+        isManualMode = false;
+      } else if (command == 1002){ // Set manual mode command
+        isManualMode = true;
       }
-      else {
-        resetAlarmCommand = true;
-        /* callback that there is no alarm */
-      }
+    } else { //update temperature value
+      T = value;
     }
-    else if(receivedData == "ALARM"){
-      alarmCommand = true;
-    }
-    else {
-      T = receivedData.toFloat();
-    }
+    Serial.println(String(windowPosition));
   }
 }
 
@@ -85,7 +93,7 @@ void updateWindowPosition(){
     windowPosition = 100;
   }
 
-  servoAngle = map(windowPosition, 0, 100, 0, 90);
+  int servoAngle = map(windowPosition, 0, 100, 0, 90);
   windowServo.write(servoAngle);
 }
 
