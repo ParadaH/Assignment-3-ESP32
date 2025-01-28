@@ -122,17 +122,12 @@ void loop(){
           currentState = MANUAL_MODE;
         } 
         else if(!isManualMode){
-          if(alarmCommand = false){
-            currentState = ALARM;
-            break;
-          }
           currentState = AUTO_MODE;
         }
       }
       else {
         currentState = ALARM;
       }
-        
       break;
     }
 
